@@ -147,10 +147,8 @@ int	get_sdr_partial(struct ipmi_softc *, u_int16_t, u_int16_t,
 	    u_int8_t, u_int8_t, void *, u_int16_t *);
 int	get_sdr(struct ipmi_softc *, u_int16_t, u_int16_t *);
 
-int	ipmi_sendcmd(struct ipmi_softc *, int, int, int, int, int, const void*);
-int	ipmi_recvcmd(struct ipmi_softc *, int, int *, void *);
-int	ipmi_sendcmd2(struct ipmi_cmd *);
-int	ipmi_recvcmd2(struct ipmi_cmd *);
+int	ipmi_sendcmd(struct ipmi_cmd *);
+int	ipmi_recvcmd(struct ipmi_cmd *);
 void	ipmi_delay(struct ipmi_softc *, int);
 void	ipmi_cmd(void *);
 
@@ -932,9 +930,15 @@ cmn_buildmsg(struct ipmi_softc *sc, int nfLun, int cmd, int len,
 
 /* Send an IPMI command */
 int
-ipmi_sendcmd(struct ipmi_softc *sc, int rssa, int rslun, int netfn, int cmd,
-    int txlen, const void *data)
+ipmi_sendcmd(struct ipmi_cmd *c)
 {
+	struct ipmi_softc 	*sc = c->c_sc;
+	int rssa = c->c_rssa;
+	int rslun = c->c_rslun;
+	int netfn = c->c_netfn;
+	int cmd = c->c_cmd;
+	int txlen = c->c_txlen;
+	const void *data = c->c_data;
 	u_int8_t	*buf;
 	int		rc = -1;
 
@@ -980,14 +984,12 @@ done:
 
 /* Send an IPMI command */
 int
-ipmi_sendcmd2(struct ipmi_cmd *c)
+ipmi_recvcmd(struct ipmi_cmd *c)
 {
-	return ipmi_sendcmd(c->c_sc, c->c_rssa, c->c_rslun, c->c_netfn, c->c_cmd, c->c_txlen, c->c_data);
-}
-
-int
-ipmi_recvcmd(struct ipmi_softc *sc, int maxlen, int *rxlen, void *data)
-{
+	struct ipmi_softc *sc = c->c_sc;
+	int maxlen = c->c_maxrxlen;
+	int *rxlen = &c->c_rxlen;
+	void *data = c->c_data;
 	u_int8_t	*buf, rc = 0;
 	int		rawlen;
 
@@ -1027,12 +1029,6 @@ ipmi_recvcmd(struct ipmi_softc *sc, int maxlen, int *rxlen, void *data)
 	return (rc);
 }
 
-int
-ipmi_recvcmd2(struct ipmi_cmd *c)
-{
-	return ipmi_recvcmd(c->c_sc, c->c_maxrxlen, &c->c_rxlen, c->c_data);
-}
-
 void
 ipmi_delay(struct ipmi_softc *sc, int period)
 {
@@ -1046,10 +1042,10 @@ ipmi_cmd(void *arg)
 	struct ipmi_cmd		*c = arg;
 
 	c->c_sc->sc_cmd = c;
-	if (ipmi_sendcmd2(c)) {
+	if (ipmi_sendcmd(c)) {
 		panic("%s: sendcmd fails", DEVNAME(c->c_sc));
 	}
-	c->c_ccode = ipmi_recvcmd2(c);
+	c->c_ccode = ipmi_recvcmd(c);
 	c->c_sc->sc_cmd = NULL;
 }
 
