@@ -319,8 +319,9 @@ bt_write(struct ipmi_softc *sc, int reg, uint8_t data)
 }
 
 int
-bt_sendmsg(struct ipmi_softc *sc, int len, const u_int8_t *data)
+bt_sendmsg(struct ipmi_cmd *c, int len, const u_int8_t *data)
 {
+	struct ipmi_softc *sc = c->c_sc;
 	int i;
 
 	bt_write(sc, _BT_CTRL_REG, BT_CLR_WR_PTR);
@@ -336,8 +337,9 @@ bt_sendmsg(struct ipmi_softc *sc, int len, const u_int8_t *data)
 }
 
 int
-bt_recvmsg(struct ipmi_softc *sc, int maxlen, int *rxlen, u_int8_t *data)
+bt_recvmsg(struct ipmi_cmd *c, int maxlen, int *rxlen, u_int8_t *data)
 {
+	struct ipmi_softc *sc = c->c_sc;
 	u_int8_t len, v, i;
 
 	if (bmc_io_wait(sc, _BT_CTRL_REG, BT_BMC2HOST_ATN, BT_BMC2HOST_ATN,
@@ -484,8 +486,9 @@ smic_read_data(struct ipmi_softc *sc, u_int8_t *data)
 #define ErrStat(a,b) if (a) printf(b);
 
 int
-smic_sendmsg(struct ipmi_softc *sc, int len, const u_int8_t *data)
+smic_sendmsg(struct ipmi_cmd *c, int len, const u_int8_t *data)
 {
+	struct ipmi_softc *sc = c->c_sc;
 	int sts, idx;
 
 	sts = smic_write_cmd_data(sc, SMS_CC_START_TRANSFER, &data[0]);
@@ -505,8 +508,9 @@ smic_sendmsg(struct ipmi_softc *sc, int len, const u_int8_t *data)
 }
 
 int
-smic_recvmsg(struct ipmi_softc *sc, int maxlen, int *len, u_int8_t *data)
+smic_recvmsg(struct ipmi_cmd *c, int maxlen, int *len, u_int8_t *data)
 {
+	struct ipmi_softc *sc = c->c_sc;
 	int sts, idx;
 
 	*len = 0;
@@ -646,8 +650,9 @@ kcs_read_data(struct ipmi_softc *sc, u_int8_t * data)
 
 /* Exported KCS functions */
 int
-kcs_sendmsg(struct ipmi_softc *sc, int len, const u_int8_t * data)
+kcs_sendmsg(struct ipmi_cmd *c, int len, const u_int8_t * data)
 {
+	struct ipmi_softc *sc = c->c_sc;
 	int idx, sts;
 
 	/* ASSERT: IBF is clear */
@@ -672,8 +677,9 @@ kcs_sendmsg(struct ipmi_softc *sc, int len, const u_int8_t * data)
 }
 
 int
-kcs_recvmsg(struct ipmi_softc *sc, int maxlen, int *rxlen, u_int8_t * data)
+kcs_recvmsg(struct ipmi_cmd *c, int maxlen, int *rxlen, u_int8_t * data)
 {
+	struct ipmi_softc *sc = c->c_sc;
 	int idx, sts;
 
 	for (idx = 0; idx < maxlen; idx++) {
@@ -968,7 +974,7 @@ ipmi_sendcmd(struct ipmi_cmd *c)
 	} else
 		sc->sc_if->buildmsg(c);
 
-	rc = sc->sc_if->sendmsg(sc, c->c_txlen, sc->sc_buf);
+	rc = sc->sc_if->sendmsg(c, c->c_txlen, sc->sc_buf);
 
 	ipmi_delay(sc, 5); /* give bmc chance to digest command */
 
@@ -985,7 +991,7 @@ ipmi_recvcmd(struct ipmi_cmd *c)
 	int		rawlen;
 
 	/* Receive message from interface, copy out result data */
-	if (sc->sc_if->recvmsg(sc, c->c_maxrxlen + 3, &rawlen, buf) ||
+	if (sc->sc_if->recvmsg(c, c->c_maxrxlen + 3, &rawlen, buf) ||
 	    rawlen < IPMI_MSG_DATARCV) {
 		return (-1);
 	}
