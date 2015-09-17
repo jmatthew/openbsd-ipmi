@@ -1775,6 +1775,8 @@ ipmiioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *proc)
 	return (0);
 }
 
+#define		MIN_PERIOD	10
+
 int
 ipmi_watchdog(void *arg, int period)
 {
@@ -1786,10 +1788,8 @@ ipmi_watchdog(void *arg, int period)
 		}
 		return (period);
 	}
-
-	if (period < 10 && period > 0)
-		period = 10;
-
+	if (period < MIN_PERIOD && period > 0)
+		period = MIN_PERIOD;
 	sc->sc_wdog_period = period;
 	ipmi_watchdog_set(sc);
 	return (period);
