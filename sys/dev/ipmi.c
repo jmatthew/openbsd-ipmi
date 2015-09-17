@@ -149,7 +149,10 @@ int	get_sdr(struct ipmi_softc *, u_int16_t, u_int16_t *);
 
 int	ipmi_sendcmd(struct ipmi_softc *, int, int, int, int, int, const void*);
 int	ipmi_recvcmd(struct ipmi_softc *, int, int *, void *);
+int	ipmi_sendcmd2(struct ipmi_cmd *);
+int	ipmi_recvcmd2(struct ipmi_cmd *);
 void	ipmi_delay(struct ipmi_softc *, int);
+void	ipmi_cmd(void *);
 
 int	ipmi_watchdog(void *, int);
 
@@ -975,6 +978,13 @@ done:
 	return (rc);
 }
 
+/* Send an IPMI command */
+int
+ipmi_sendcmd2(struct ipmi_cmd *c)
+{
+	return ipmi_sendcmd(c->c_sc, c->c_rssa, c->c_rslun, c->c_netfn, c->c_cmd, c->c_txlen, c->c_data);
+}
+
 int
 ipmi_recvcmd(struct ipmi_softc *sc, int maxlen, int *rxlen, void *data)
 {
@@ -1017,11 +1027,30 @@ ipmi_recvcmd(struct ipmi_softc *sc, int maxlen, int *rxlen, void *data)
 	return (rc);
 }
 
+int
+ipmi_recvcmd2(struct ipmi_cmd *c)
+{
+	return ipmi_recvcmd(c->c_sc, c->c_maxrxlen, &c->c_rxlen, c->c_data);
+}
+
 void
 ipmi_delay(struct ipmi_softc *sc, int period)
 {
 	/* period is in 10 ms increments */
 	delay(period * 10000);
+}
+
+void
+ipmi_cmd(void *arg)
+{
+	struct ipmi_cmd		*c = arg;
+
+	c->c_sc->sc_cmd = c;
+	if (ipmi_sendcmd2(c)) {
+		panic("%s: sendcmd fails", DEVNAME(c->c_sc));
+	}
+	c->c_ccode = ipmi_recvcmd2(c);
+	c->c_sc->sc_cmd = NULL;
 }
 
 /* Read a partial SDR entry */
