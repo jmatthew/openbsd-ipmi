@@ -53,6 +53,12 @@ struct ipmi_sensor {
 	SLIST_ENTRY(ipmi_sensor) list;
 };
 
+struct ipmi_stats {
+	int ncmds;
+	int ntickles;
+	int nioctls;
+} ipmi_stats;
+
 int	ipmi_nintr;
 int	ipmi_poll = 1;
 int	ipmi_enabled = 0;
@@ -1062,6 +1068,8 @@ ipmi_cmd(void *arg)
 	c->c_ccode = ipmi_recvcmd(c);
 	c->c_sc->sc_cmd = NULL;
 	c->c_sc->sc_iowait_args = NULL;
+
+	ipmi_stats.ncmds++;
 }
 
 /* Read a partial SDR entry */
@@ -1816,6 +1824,8 @@ ipmi_watchdog_tickle(void *arg)
 	ipmi_cmd(&c);
 
 	splx(s);
+
+	ipmi_stats.ntickles++;
 }
 
 void
