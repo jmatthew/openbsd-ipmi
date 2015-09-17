@@ -59,8 +59,6 @@ struct ipmi_stats {
 	int nioctls;
 } ipmi_stats;
 
-int	ipmi_nintr;
-int	ipmi_poll = 1;
 int	ipmi_enabled = 0;
 
 #define SENSOR_REFRESH_RATE (5 * hz)
@@ -142,8 +140,6 @@ long signextend(unsigned long, int);
 SLIST_HEAD(ipmi_sensors_head, ipmi_sensor);
 struct ipmi_sensors_head ipmi_sensor_list =
     SLIST_HEAD_INITIALIZER(ipmi_sensor_list);
-
-struct timeout ipmi_timeout;
 
 void	dumpb(const char *, int, const u_int8_t *);
 
@@ -1539,9 +1535,6 @@ add_child_sensors(struct ipmi_softc *sc, u_int8_t *psdr, int count,
 void
 ipmi_refresh_sensors(struct ipmi_softc *sc)
 {
-	if (!ipmi_poll)
-		return;
-
 	if (SLIST_EMPTY(&ipmi_sensor_list))
 		return;
 
