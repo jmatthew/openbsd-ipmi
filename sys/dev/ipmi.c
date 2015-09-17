@@ -1839,13 +1839,15 @@ ipmi_watchdog_set(void *arg)
 	c.c_data = wdog;
 	ipmi_cmd(&c);
 
+	wdog[IPMI_SET_WDOG_TIMER] &= ~IPMI_WDOG_TIMER_DONTSTOP;
+	wdog[IPMI_SET_WDOG_TIMER] |= (sc->sc_wdog_period == 0) ?
+	    0 : IPMI_WDOG_TIMER_DONTSTOP;
+	wdog[IPMI_SET_WDOG_ACTION] &= ~IPMI_WDOG_ACTION_ACTION_MASK;
+	wdog[IPMI_SET_WDOG_ACTION] |= (sc->sc_wdog_period == 0) ?
+	    IPMI_WDOG_ACTION_ACTION_DISABLED : IPMI_WDOG_ACTION_ACTION_REBOOT;
 	/* Period is 10ths/sec */
 	uint16_t timo = htole16(sc->sc_wdog_period * 10);
-
 	memcpy(&wdog[IPMI_SET_WDOG_TIMOL], &timo, 2);
-	wdog[IPMI_SET_WDOG_ACTION] &= ~IPMI_WDOG_MASK;
-	wdog[IPMI_SET_WDOG_ACTION] |= (sc->sc_wdog_period == 0) ?
-	    IPMI_WDOG_DISABLED : IPMI_WDOG_REBOOT;
 
 	c.c_cmd = APP_SET_WATCHDOG_TIMER;
 	c.c_txlen = IPMI_SET_WDOG_MAX;
