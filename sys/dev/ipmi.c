@@ -37,7 +37,6 @@
 #include <sys/kthread.h>
 
 #include <machine/bus.h>
-#include <machine/intr.h>
 #include <machine/smbiosvar.h>
 
 #include <dev/isa/isareg.h>
@@ -154,7 +153,6 @@ void	ipmi_delay(struct ipmi_softc *, int);
 
 int	ipmi_watchdog(void *, int);
 
-int	ipmi_intr(void *);
 int	ipmi_match(struct device *, void *, void *);
 void	ipmi_attach(struct device *, struct device *, void *);
 int	ipmi_activate(struct device *, int);
@@ -1467,20 +1465,6 @@ add_child_sensors(struct ipmi_softc *sc, u_int8_t *psdr, int count,
 	return (1);
 }
 
-/* Interrupt handler */
-int
-ipmi_intr(void *arg)
-{
-	struct ipmi_softc	*sc = (struct ipmi_softc *)arg;
-	int			v;
-
-	v = bmc_read(sc, _KCS_STATUS_REGISTER);
-	if (v & KCS_OBF)
-		++ipmi_nintr;
-
-	return (0);
-}
-
 /* Handle IPMI Timer - reread sensor values */
 void
 ipmi_refresh_sensors(struct ipmi_softc *sc)
@@ -1525,11 +1509,6 @@ ipmi_map_regs(struct ipmi_softc *sc, struct ipmi_attach_args *ia)
 		    sc->sc_if->nregs * sc->sc_if_iospacing, &sc->sc_ioh);
 		return (-1);
 	}
-#if 0
-	if (iaa->if_if_irq != -1)
-		sc->ih = isa_intr_establish(-1, iaa->if_if_irq,
-		    iaa->if_irqlvl, IPL_BIO, ipmi_intr, sc, DEVNAME(sc));
-#endif
 	return (0);
 }
 
