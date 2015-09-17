@@ -933,19 +933,13 @@ int
 ipmi_sendcmd(struct ipmi_cmd *c)
 {
 	struct ipmi_softc 	*sc = c->c_sc;
-	int rssa = c->c_rssa;
-	int rslun = c->c_rslun;
-	int netfn = c->c_netfn;
-	int cmd = c->c_cmd;
-	int txlen = c->c_txlen;
-	const void *data = c->c_data;
 	u_int8_t	*buf;
 	int		rc = -1;
 
 	dbg_printf(50, "ipmi_sendcmd: rssa=%.2x nfln=%.2x cmd=%.2x len=%.2x\n",
-	    rssa, NETFN_LUN(netfn, rslun), cmd, txlen);
-	dbg_dump(10, " send", txlen, data);
-	if (rssa != BMC_SA) {
+	    c->c_rssa, NETFN_LUN(c->c_netfn, c->c_rslun), c->c_cmd, c->c_txlen);
+	dbg_dump(10, " send", c->c_txlen, c->c_data);
+	if (c->c_rssa != BMC_SA) {
 #if 0
 		buf = sc->sc_if->buildmsg(sc, NETFN_LUN(APP_NETFN, BMC_LUN),
 		    APP_SEND_MESSAGE, 7 + txlen, NULL, &txlen);
@@ -966,15 +960,15 @@ ipmi_sendcmd(struct ipmi_cmd *c)
 #endif
 		goto done;
 	} else
-		buf = sc->sc_if->buildmsg(sc, NETFN_LUN(netfn, rslun), cmd,
-		    txlen, data, &txlen);
+		buf = sc->sc_if->buildmsg(sc, NETFN_LUN(c->c_netfn, c->c_rslun), c->c_cmd,
+		    c->c_txlen, c->c_data, &c->c_txlen);
 
 	if (buf == NULL) {
 		printf("%s: sendcmd malloc fails\n", DEVNAME(sc));
 		goto done;
 	}
-	rc = sc->sc_if->sendmsg(sc, txlen, buf);
-	free(buf, M_DEVBUF, txlen);
+	rc = sc->sc_if->sendmsg(sc, c->c_txlen, buf);
+	free(buf, M_DEVBUF, c->c_txlen);
 
 	ipmi_delay(sc, 5); /* give bmc chance to digest command */
 
@@ -987,28 +981,25 @@ int
 ipmi_recvcmd(struct ipmi_cmd *c)
 {
 	struct ipmi_softc *sc = c->c_sc;
-	int maxlen = c->c_maxrxlen;
-	int *rxlen = &c->c_rxlen;
-	void *data = c->c_data;
 	u_int8_t	*buf, rc = 0;
 	int		rawlen;
 
 	/* Need three extra bytes: netfn/cmd/ccode + data */
-	buf = malloc(maxlen + 3, M_DEVBUF, M_NOWAIT);
+	buf = malloc(c->c_maxrxlen + 3, M_DEVBUF, M_NOWAIT);
 	if (buf == NULL) {
 		printf("%s: ipmi_recvcmd: malloc fails\n", DEVNAME(sc));
 		return (-1);
 	}
 	/* Receive message from interface, copy out result data */
-	if (sc->sc_if->recvmsg(sc, maxlen + 3, &rawlen, buf) ||
+	if (sc->sc_if->recvmsg(sc, c->c_maxrxlen + 3, &rawlen, buf) ||
 	    rawlen < IPMI_MSG_DATARCV) {
-		free(buf, M_DEVBUF, maxlen + 3);
+		free(buf, M_DEVBUF, c->c_maxrxlen + 3);
 		return (-1);
 	}
 
-	*rxlen = rawlen - IPMI_MSG_DATARCV;
-	if (*rxlen > 0 && data)
-		memcpy(data, buf + IPMI_MSG_DATARCV, *rxlen);
+	c->c_rxlen = rawlen - IPMI_MSG_DATARCV;
+	if (c->c_rxlen > 0 && c->c_data)
+		memcpy(c->c_data, buf + IPMI_MSG_DATARCV, c->c_rxlen);
 
 	rc = buf[IPMI_MSG_CCODE];
 #ifdef IPMI_DEBUG
@@ -1019,10 +1010,10 @@ ipmi_recvcmd(struct ipmi_cmd *c)
 
 	dbg_printf(50, "ipmi_recvcmd: nfln=%.2x cmd=%.2x err=%.2x len=%.2x\n",
 	    buf[IPMI_MSG_NFLN], buf[IPMI_MSG_CMD], buf[IPMI_MSG_CCODE],
-	    *rxlen);
-	dbg_dump(10, " recv", *rxlen, data);
+	    c->c_rxlen);
+	dbg_dump(10, " recv", c->c_rxlen, c->c_data);
 
-	free(buf, M_DEVBUF, maxlen + 3);
+	free(buf, M_DEVBUF, c->c_maxrxlen + 3);
 
 	ipmi_delay(sc, 5); /* give bmc chance to digest command */
 
