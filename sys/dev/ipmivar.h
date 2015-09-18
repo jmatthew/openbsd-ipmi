@@ -115,15 +115,16 @@ struct ipmi_softc {
 	struct ipmi_iowait	*sc_cmd_iowait;
 	struct taskq		*sc_cmd_taskq;
 
+	struct ipmi_ioctl {
+		struct rwlock		lock;
+	} sc_ioctl;
+
 	int			sc_wdog_period;
 #define	IPMI_WDOG_TICKLE_NTASKS	2
 	struct task		sc_wdog_tickle_tasks[IPMI_WDOG_TICKLE_NTASKS];
 	int			sc_wdog_tickle_cnt;
 
 	struct ipmi_thread	*sc_thread;
-
-	struct rwlock		sc_lock;
-
 	struct ipmi_sensor	*current_sensor;
 	struct ksensordev	sc_sensordev;
 };
