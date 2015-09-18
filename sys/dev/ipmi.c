@@ -1724,6 +1724,7 @@ ipmi_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ipmi_softc	*sc = (void *) self;
 	struct ipmi_attach_args *ia = aux;
+	struct ipmi_cmd		*c = &sc->sc_ioctl.cmd;
 	int			i;
 
 	/* Map registers */
@@ -1761,6 +1762,11 @@ ipmi_attach(struct device *parent, struct device *self, void *aux)
 	wdog_register(ipmi_watchdog, sc);
 
 	rw_init(&sc->sc_ioctl.lock, DEVNAME(sc));
+	sc->sc_ioctl.req.msgid = -1;
+	c->c_sc = sc;
+	c->c_maxrxlen = sizeof(sc->sc_ioctl.buf);
+	c->c_data = sc->sc_ioctl.buf;
+	c->c_ccode = -1;
 
 	sc->sc_cmd = NULL;
 	sc->sc_cmd_iowait = NULL;
@@ -1801,6 +1807,11 @@ int
 ipmiioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *proc)
 {
 	struct ipmi_softc	*sc = ipmilookup(dev);
+	struct ipmi_req		*req = (struct ipmi_req *)data;
+	struct ipmi_recv	*recv = (struct ipmi_recv *)data;
+	struct ipmi_cmd		*c = &sc->sc_ioctl.cmd;
+	int			len;
+	u_char			ccode;
 	int			rc = 0;
 
 	if (sc == NULL)
@@ -1822,12 +1833,62 @@ ipmiioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *proc)
 	case IPMICTL_SEND_COMMAND_32:
 #endif
 	case IPMICTL_SEND_COMMAND:
+		if (req->msgid == -1) {
+			rc = EINVAL; // XXX
+			goto reset;
+		}
+		if (sc->sc_ioctl.req.msgid != -1) {
+			rc = EBUSY;
+			goto reset;
+		}
+		len = req->msg.data_len;
+		if (len > c->c_maxrxlen) {
+			rc = E2BIG; // XXX
+			goto reset;
+		}
+		sc->sc_ioctl.req = *req;
+		c->c_ccode = -1;
+		rc = copyin(req->msg.data, c->c_data, len);
+		if (rc != 0)
+			goto reset;
+		KASSERT(c->c_ccode == -1);
+
+		/* Execute a command synchronously. */
+		c->c_netfn = req->msg.netfn;
+		c->c_cmd = req->msg.cmd;
+		c->c_txlen = req->msg.data_len;
+		c->c_rxlen = 0;
+		ipmi_cmd(c);
+
+		KASSERT(c->c_ccode != -1);
+		break;
+
 #ifdef IPMICTL_SEND_COMMAND_32
 	case IPMICTL_RECEIVE_MSG_TRUNC_32:
 	case IPMICTL_RECEIVE_MSG_32:
 #endif
 	case IPMICTL_RECEIVE_MSG_TRUNC:
 	case IPMICTL_RECEIVE_MSG:
+		if (sc->sc_ioctl.req.msgid == -1) {
+			rc = EINVAL;
+			goto reset;
+		}
+		if (c->c_ccode == -1) {
+			rc = EAGAIN;
+			goto reset;
+		}
+		ccode = c->c_ccode & 0xff;
+		rc = copyout(&ccode, recv->msg.data, 1);
+
+		/* Return a command result. */
+		recv->recv_type = IPMI_RESPONSE_RECV_TYPE;
+		recv->msgid = sc->sc_ioctl.req.msgid;
+		recv->msg.netfn = sc->sc_ioctl.req.msg.netfn;
+		recv->msg.cmd = sc->sc_ioctl.req.msg.cmd;
+		recv->msg.data_len = c->c_rxlen + 1;
+
+		rc = copyout(c->c_data, recv->msg.data + 1, c->c_rxlen);
+		goto reset;
 	case IPMICTL_SET_MY_ADDRESS_CMD:
 	case IPMICTL_GET_MY_ADDRESS_CMD:
 	case IPMICTL_SET_MY_LUN_CMD:
@@ -1844,6 +1905,10 @@ done:
 	rw_exit_write(&sc->sc_ioctl.lock);
 	ipmi_stats.nioctls++;
 	return (rc);
+reset:
+	sc->sc_ioctl.req.msgid = -1;
+	c->c_ccode = -1;
+	goto done;
 }
 
 #define		MIN_PERIOD	10
