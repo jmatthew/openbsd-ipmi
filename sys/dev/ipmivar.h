@@ -112,6 +112,7 @@ struct ipmi_softc {
 	int			sc_btseq;
 	u_int8_t		*sc_buf;
 	struct ipmi_cmd		*sc_cmd;
+	struct ipmi_iowait	*sc_cmd_iowait;
 	struct taskq		*sc_cmd_taskq;
 
 	int			sc_wdog_period;
@@ -122,8 +123,6 @@ struct ipmi_softc {
 	struct ipmi_thread	*sc_thread;
 
 	struct rwlock		sc_lock;
-
-	struct ipmi_iowait	*sc_iowait_args;
 
 	struct ipmi_sensor	*current_sensor;
 	struct ksensordev	sc_sensordev;

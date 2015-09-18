@@ -272,7 +272,7 @@ bmc_write(struct ipmi_softc *sc, int offset, u_int8_t val)
 int
 bmc_io_wait(struct ipmi_softc *sc)
 {
-	struct ipmi_iowait	*a = sc->sc_iowait_args;
+	struct ipmi_iowait	*a = sc->sc_cmd_iowait;
 	volatile u_int8_t	v;
 	int			count = 5000000; /* == 5s XXX can be shorter */
 
@@ -327,7 +327,7 @@ bt_read(struct ipmi_softc *sc, int reg)
 int
 bt_write(struct ipmi_softc *sc, int reg, uint8_t data)
 {
-	struct ipmi_iowait *a = sc->sc_iowait_args;
+	struct ipmi_iowait *a = sc->sc_cmd_iowait;
 
 	a->offset = _BT_CTRL_REG;
 	a->mask = BT_BMC_BUSY;
@@ -344,7 +344,7 @@ int
 bt_sendmsg(struct ipmi_cmd *c)
 {
 	struct ipmi_softc *sc = c->c_sc;
-	struct ipmi_iowait *a = sc->sc_iowait_args;
+	struct ipmi_iowait *a = sc->sc_cmd_iowait;
 	int i;
 
 	bt_write(sc, _BT_CTRL_REG, BT_CLR_WR_PTR);
@@ -366,7 +366,7 @@ int
 bt_recvmsg(struct ipmi_cmd *c)
 {
 	struct ipmi_softc *sc = c->c_sc;
-	struct ipmi_iowait *a = sc->sc_iowait_args;
+	struct ipmi_iowait *a = sc->sc_cmd_iowait;
 	u_int8_t len, v, i, j;
 
 	a->offset = _BT_CTRL_REG;
@@ -464,7 +464,7 @@ int	smic_read_data(struct ipmi_softc *, u_int8_t *);
 int
 smic_wait(struct ipmi_softc *sc, u_int8_t mask, u_int8_t val, const char *lbl)
 {
-	struct ipmi_iowait *a = sc->sc_iowait_args;
+	struct ipmi_iowait *a = sc->sc_cmd_iowait;
 	int v;
 
 	/* Wait for expected flag bits */
@@ -623,7 +623,7 @@ int	kcs_read_data(struct ipmi_softc *, u_int8_t *);
 int
 kcs_wait(struct ipmi_softc *sc, u_int8_t mask, u_int8_t value, const char *lbl)
 {
-	struct ipmi_iowait *a = sc->sc_iowait_args;
+	struct ipmi_iowait *a = sc->sc_cmd_iowait;
 	int v;
 
 	a->offset = _KCS_STATUS_REGISTER;
@@ -1057,13 +1057,13 @@ ipmi_cmd_poll(struct ipmi_cmd *c)
 	}
 
 	c->c_sc->sc_cmd = c;
-	c->c_sc->sc_iowait_args = &iowait;
+	c->c_sc->sc_cmd_iowait = &iowait;
 	if (ipmi_sendcmd(c)) {
 		panic("%s: sendcmd fails", DEVNAME(c->c_sc));
 	}
 	c->c_ccode = ipmi_recvcmd(c);
 	c->c_sc->sc_cmd = NULL;
-	c->c_sc->sc_iowait_args = NULL;
+	c->c_sc->sc_cmd_iowait = NULL;
 
 	ipmi_stats.ncmds++;
 }
@@ -1761,6 +1761,8 @@ ipmi_attach(struct device *parent, struct device *self, void *aux)
 	/* lock around read_sensor so that no one messes with the bmc regs */
 	rw_init(&sc->sc_lock, DEVNAME(sc));
 
+	sc->sc_cmd = NULL;
+	sc->sc_cmd_iowait = NULL;
 	sc->sc_cmd_taskq = taskq_create("ipmicmd", 1, IPL_NONE, 0);
 }
 
