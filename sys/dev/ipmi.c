@@ -32,7 +32,6 @@
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/extent.h>
-#include <sys/timeout.h>
 #include <sys/sensors.h>
 #include <sys/malloc.h>
 #include <sys/kthread.h>
@@ -168,9 +167,6 @@ void	ipmi_sensor_name(char *, int, u_int8_t, u_int8_t *);
 u_int8_t bmc_read(struct ipmi_softc *, int);
 void	bmc_write(struct ipmi_softc *, int, u_int8_t);
 int	bmc_io_wait(struct ipmi_softc *, int, u_int8_t, u_int8_t, const char *);
-int	bmc_io_wait_cold(struct ipmi_softc *, int, u_int8_t, u_int8_t,
-    const char *);
-void	_bmc_io_wait(void *);
 
 void	*bt_buildmsg(struct ipmi_softc *, int, int, int, const void *, int *);
 void	*cmn_buildmsg(struct ipmi_softc *, int, int, int, const void *, int *);
@@ -256,64 +252,9 @@ bmc_write(struct ipmi_softc *sc, int offset, u_int8_t val)
 	    offset * sc->sc_if_iospacing, val);
 }
 
-void
-_bmc_io_wait(void *arg)
-{
-	struct ipmi_softc	*sc = arg;
-	struct ipmi_bmc_args	*a = sc->sc_iowait_args;
-
-	*a->v = bmc_read(sc, a->offset);
-	if ((*a->v & a->mask) == a->value) {
-		sc->sc_wakeup = 0;
-		wakeup(sc);
-		return;
-	}
-
-	if (++sc->sc_retries > sc->sc_max_retries) {
-		sc->sc_wakeup = 0;
-		wakeup(sc);
-		return;
-	}
-
-	timeout_add(&sc->sc_timeout, 1);
-}
-
 int
 bmc_io_wait(struct ipmi_softc *sc, int offset, u_int8_t mask, u_int8_t value,
     const char *lbl)
-{
-	volatile u_int8_t	v;
-	struct ipmi_bmc_args	args;
-
-	if (cold || sc->sc_poll)
-		return (bmc_io_wait_cold(sc, offset, mask, value, lbl));
-
-	sc->sc_retries = 0;
-	sc->sc_wakeup = 1;
-
-	args.offset = offset;
-	args.mask = mask;
-	args.value = value;
-	args.v = &v;
-	sc->sc_iowait_args = &args;
-
-	_bmc_io_wait(sc);
-
-	while (sc->sc_wakeup)
-		tsleep(sc, PWAIT, lbl, 0);
-
-	if (sc->sc_retries > sc->sc_max_retries) {
-		dbg_printf(1, "%s: bmc_io_wait fails : v=%.2x m=%.2x "
-		    "b=%.2x %s\n", DEVNAME(sc), v, mask, value, lbl);
-		return (-1);
-	}
-
-	return (v);
-}
-
-int
-bmc_io_wait_cold(struct ipmi_softc *sc, int offset, u_int8_t mask,
-    u_int8_t value, const char *lbl)
 {
 	volatile u_int8_t	v;
 	int			count = 5000000; /* == 5s XXX can be shorter */
@@ -326,7 +267,7 @@ bmc_io_wait_cold(struct ipmi_softc *sc, int offset, u_int8_t mask,
 		delay(1);
 	}
 
-	dbg_printf(1, "%s: bmc_io_wait_cold fails : *v=%.2x m=%.2x b=%.2x %s\n",
+	dbg_printf(1, "%s: bmc_io_wait fails : *v=%.2x m=%.2x b=%.2x %s\n",
 	    DEVNAME(sc), v, mask, value, lbl);
 	return (-1);
 
@@ -1082,11 +1023,7 @@ void
 ipmi_delay(struct ipmi_softc *sc, int period)
 {
 	/* period is in 10 ms increments */
-	if (cold || sc->sc_poll)
-		delay(period * 10000);
-	else
-		while (tsleep(sc, PWAIT, "ipmicmd", period) != EWOULDBLOCK)
-			continue;
+	delay(period * 10000);
 }
 
 /* Read a partial SDR entry */
@@ -1757,12 +1694,6 @@ ipmi_attach(struct device *parent, struct device *self, void *aux)
 
 	/* lock around read_sensor so that no one messes with the bmc regs */
 	rw_init(&sc->sc_lock, DEVNAME(sc));
-
-	/* setup ticker */
-	sc->sc_retries = 0;
-	sc->sc_wakeup = 0;
-	sc->sc_max_retries = 50; /* 50 * 1/100 = 0.5 seconds max */
-	timeout_set(&sc->sc_timeout, _bmc_io_wait, sc);
 }
 
 int
@@ -1787,12 +1718,10 @@ ipmi_watchdog(void *arg, int period)
 	if (sc->sc_wdog_period == period) {
 		if (period != 0) {
 			s = splsoftclock();
-			sc->sc_poll = 1;
 			/* tickle the watchdog */
 			rc = ipmi_sendcmd(sc, BMC_SA, BMC_LUN, APP_NETFN,
 			    APP_RESET_WATCHDOG, 0, NULL);
 			rc = ipmi_recvcmd(sc, 0, &len, NULL);
-			sc->sc_poll = 0;
 			splx(s);
 		}
 		return (period);
@@ -1802,7 +1731,6 @@ ipmi_watchdog(void *arg, int period)
 		period = 10;
 
 	s = splsoftclock();
-	sc->sc_poll = 1;
 	/* XXX what to do if poking wdog fails? */
 	rc = ipmi_sendcmd(sc, BMC_SA, BMC_LUN, APP_NETFN,
 	    APP_GET_WATCHDOG_TIMER, 0, NULL);
@@ -1820,7 +1748,6 @@ ipmi_watchdog(void *arg, int period)
 	    APP_SET_WATCHDOG_TIMER, IPMI_SET_WDOG_MAX, wdog);
 	rc = ipmi_recvcmd(sc, 0, &len, NULL);
 
-	sc->sc_poll = 0;
 	splx(s);
 
 	sc->sc_wdog_period = period;

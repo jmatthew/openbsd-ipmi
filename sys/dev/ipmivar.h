@@ -30,7 +30,6 @@
 #ifndef _IPMIVAR_H_
 #define _IPMIVAR_H_
 
-#include <sys/timeout.h>
 #include <sys/rwlock.h>
 #include <sys/sensors.h>
 
@@ -94,19 +93,12 @@ struct ipmi_softc {
 
 	struct ipmi_thread	*sc_thread;
 
-	struct timeout		sc_timeout;
-	int			sc_max_retries;
-	int			sc_retries;
-	int			sc_wakeup;
-
 	struct rwlock		sc_lock;
 
 	struct ipmi_bmc_args	*sc_iowait_args;
 
 	struct ipmi_sensor	*current_sensor;
 	struct ksensordev	sc_sensordev;
-
-	int			sc_poll;
 };
 
 struct ipmi_thread {
