@@ -152,7 +152,6 @@ int	get_sdr(struct ipmi_softc *, u_int16_t, u_int16_t *);
 
 int	ipmi_sendcmd(struct ipmi_cmd *);
 int	ipmi_recvcmd(struct ipmi_cmd *);
-void	ipmi_delay(struct ipmi_softc *, int);
 void	ipmi_cmd(struct ipmi_cmd *);
 void	ipmi_cmd_poll(struct ipmi_cmd *);
 void	ipmi_cmd_wait(struct ipmi_cmd *);
@@ -1000,8 +999,6 @@ ipmi_sendcmd(struct ipmi_cmd *c)
 	c->c_txlen += sc->sc_if->datasnd;
 	rc = sc->sc_if->sendmsg(c);
 
-	ipmi_delay(sc, 5); /* give bmc chance to digest command */
-
 done:
 	return (rc);
 }
@@ -1036,16 +1033,7 @@ ipmi_recvcmd(struct ipmi_cmd *c)
 	    c->c_rxlen);
 	dbg_dump(10, " recv", c->c_rxlen, c->c_data);
 
-	ipmi_delay(sc, 5); /* give bmc chance to digest command */
-
 	return (rc);
-}
-
-void
-ipmi_delay(struct ipmi_softc *sc, int period)
-{
-	/* period is in 10 ms increments */
-	delay(period * 10000);
 }
 
 void
@@ -1427,9 +1415,6 @@ read_sensor(struct ipmi_softc *sc, struct ipmi_sensor *psensor)
 	u_int8_t	data[8];
 	int		rv = -1;
 
-	if (!cold)
-		rw_enter_write(&sc->sc_lock);
-
 	memset(data, 0, sizeof(data));
 	data[0] = psensor->i_num;
 
@@ -1454,8 +1439,6 @@ read_sensor(struct ipmi_softc *sc, struct ipmi_sensor *psensor)
 	}
 	psensor->i_sensor.status = ipmi_sensor_status(sc, psensor, data);
 	rv = 0;
-	if (!cold)
-		rw_exit_write(&sc->sc_lock);
 	return (rv);
 }
 
@@ -1849,10 +1832,7 @@ void
 ipmi_watchdog_tickle(void *arg)
 {
 	struct ipmi_softc	*sc = arg;
-	int			s;
 	struct ipmi_cmd		c;
-
-	s = splsoftclock();
 
 	c.c_sc = sc;
 	c.c_rssa = BMC_SA;
@@ -1865,8 +1845,6 @@ ipmi_watchdog_tickle(void *arg)
 	c.c_data = NULL;
 	ipmi_cmd(&c);
 
-	splx(s);
-
 	ipmi_stats.ntickles++;
 }
 
@@ -1875,10 +1853,7 @@ ipmi_watchdog_set(void *arg)
 {
 	struct ipmi_softc	*sc = arg;
 	uint8_t			wdog[IPMI_GET_WDOG_MAX];
-	int			s;
 	struct ipmi_cmd		c;
-
-	s = splsoftclock();
 
 	c.c_sc = sc;
 	c.c_rssa = BMC_SA;
@@ -1907,8 +1882,6 @@ ipmi_watchdog_set(void *arg)
 	c.c_rxlen = 0;
 	c.c_data = wdog;
 	ipmi_cmd(&c);
-
-	splx(s);
 
 	printf("%s: watchdog %sabled\n", DEVNAME(sc),
 	    (sc->sc_wdog_period == 0) ? "dis" : "en");
