@@ -153,6 +153,8 @@ void	ipmi_delay(struct ipmi_softc *, int);
 void	ipmi_cmd(void *);
 
 int	ipmi_watchdog(void *, int);
+void	ipmi_watchdog_tickle(void *);
+void	ipmi_watchdog_set(void *);
 
 int	ipmi_match(struct device *, void *, void *);
 void	ipmi_attach(struct device *, struct device *, void *);
@@ -1720,33 +1722,52 @@ int
 ipmi_watchdog(void *arg, int period)
 {
 	struct ipmi_softc	*sc = arg;
-	uint8_t			wdog[IPMI_GET_WDOG_MAX];
-	int			s;
-	struct ipmi_cmd		c;
 
 	if (sc->sc_wdog_period == period) {
 		if (period != 0) {
-			s = splsoftclock();
-
-			/* tickle the watchdog */
-			c.c_sc = sc;
-			c.c_rssa = BMC_SA;
-			c.c_rslun = BMC_LUN;
-			c.c_netfn = APP_NETFN;
-			c.c_cmd = APP_RESET_WATCHDOG;
-			c.c_txlen = 0;
-			c.c_maxrxlen = 0;
-			c.c_rxlen = 0;
-			c.c_data = NULL;
-			ipmi_cmd(&c);
-
-			splx(s);
+			ipmi_watchdog_tickle(sc);
 		}
 		return (period);
 	}
 
 	if (period < 10 && period > 0)
 		period = 10;
+
+	sc->sc_wdog_period = period;
+	ipmi_watchdog_set(sc);
+	return (period);
+}
+
+void
+ipmi_watchdog_tickle(void *arg)
+{
+	struct ipmi_softc	*sc = arg;
+	int			s;
+	struct ipmi_cmd		c;
+
+	s = splsoftclock();
+
+	c.c_sc = sc;
+	c.c_rssa = BMC_SA;
+	c.c_rslun = BMC_LUN;
+	c.c_netfn = APP_NETFN;
+	c.c_cmd = APP_RESET_WATCHDOG;
+	c.c_txlen = 0;
+	c.c_maxrxlen = 0;
+	c.c_rxlen = 0;
+	c.c_data = NULL;
+	ipmi_cmd(&c);
+
+	splx(s);
+}
+
+void
+ipmi_watchdog_set(void *arg)
+{
+	struct ipmi_softc	*sc = arg;
+	uint8_t			wdog[IPMI_GET_WDOG_MAX];
+	int			s;
+	struct ipmi_cmd		c;
 
 	s = splsoftclock();
 
@@ -1762,12 +1783,12 @@ ipmi_watchdog(void *arg, int period)
 	ipmi_cmd(&c);
 
 	/* Period is 10ths/sec */
-	uint16_t timo = htole16(period * 10);
+	uint16_t timo = htole16(sc->sc_wdog_period * 10);
 
 	memcpy(&wdog[IPMI_SET_WDOG_TIMOL], &timo, 2);
 	wdog[IPMI_SET_WDOG_ACTION] &= ~IPMI_WDOG_MASK;
-	wdog[IPMI_SET_WDOG_ACTION] |= (period == 0) ? IPMI_WDOG_DISABLED :
-	    IPMI_WDOG_REBOOT;
+	wdog[IPMI_SET_WDOG_ACTION] |= (sc->sc_wdog_period == 0) ?
+	    IPMI_WDOG_DISABLED : IPMI_WDOG_REBOOT;
 
 	c.c_cmd = APP_SET_WATCHDOG_TIMER;
 	c.c_txlen = IPMI_SET_WDOG_MAX;
@@ -1777,7 +1798,4 @@ ipmi_watchdog(void *arg, int period)
 	ipmi_cmd(&c);
 
 	splx(s);
-
-	sc->sc_wdog_period = period;
-	return (period);
 }
