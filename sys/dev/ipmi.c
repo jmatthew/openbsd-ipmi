@@ -1873,4 +1873,7 @@ ipmi_watchdog_set(void *arg)
 	ipmi_cmd(&c);
 
 	splx(s);
+
+	printf("%s: watchdog %sabled\n", DEVNAME(sc),
+	    (sc->sc_wdog_period == 0) ? "dis" : "en");
 }
