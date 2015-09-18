@@ -112,6 +112,7 @@ struct ipmi_softc {
 	int			sc_btseq;
 	u_int8_t		*sc_buf;
 	struct ipmi_cmd		*sc_cmd;
+	struct taskq		*sc_cmd_taskq;
 
 	int			sc_wdog_period;
 #define	IPMI_WDOG_TICKLE_NTASKS	2
