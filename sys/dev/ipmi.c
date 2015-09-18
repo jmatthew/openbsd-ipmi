@@ -35,6 +35,7 @@
 #include <sys/sensors.h>
 #include <sys/malloc.h>
 #include <sys/kthread.h>
+#include <sys/task.h>
 
 #include <machine/bus.h>
 #include <machine/smbiosvar.h>
@@ -1704,6 +1705,7 @@ ipmi_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ipmi_softc	*sc = (void *) self;
 	struct ipmi_attach_args *ia = aux;
+	int			i;
 
 	/* Map registers */
 	ipmi_map_regs(sc, ia);
@@ -1734,6 +1736,9 @@ ipmi_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Setup Watchdog timer */
 	sc->sc_wdog_period = 0;
+	for (i = 0; i < IPMI_WDOG_TICKLE_NTASKS; i++)
+		task_set(&sc->sc_wdog_tickle_tasks[i], ipmi_watchdog_tickle, sc);
+	sc->sc_wdog_tickle_cnt = 0;
 	wdog_register(ipmi_watchdog, sc);
 
 	/* lock around read_sensor so that no one messes with the bmc regs */
@@ -1785,7 +1790,15 @@ ipmi_watchdog(void *arg, int period)
 
 	if (sc->sc_wdog_period == period) {
 		if (period != 0) {
-			ipmi_watchdog_tickle(sc);
+			struct task *t;
+			int res;
+
+			t = &sc->sc_wdog_tickle_tasks[
+			    sc->sc_wdog_tickle_cnt++ % IPMI_WDOG_TICKLE_NTASKS];
+			res = task_del(systq, t);
+			KASSERT(res == 0);
+			res = task_add(systq, t);
+			KASSERT(res == 1);
 		}
 		return (period);
 	}

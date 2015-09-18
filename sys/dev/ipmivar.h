@@ -32,6 +32,7 @@
 
 #include <sys/rwlock.h>
 #include <sys/sensors.h>
+#include <sys/task.h>
 
 #include <dev/ipmi_linux.h>
 
@@ -113,6 +114,9 @@ struct ipmi_softc {
 	struct ipmi_cmd		*sc_cmd;
 
 	int			sc_wdog_period;
+#define	IPMI_WDOG_TICKLE_NTASKS	2
+	struct task		sc_wdog_tickle_tasks[IPMI_WDOG_TICKLE_NTASKS];
+	int			sc_wdog_tickle_cnt;
 
 	struct ipmi_thread	*sc_thread;
 
