@@ -465,6 +465,13 @@ extern struct cdevsw cdevsw[];
 	(dev_type_stop((*))) enodev, 0, dev_init(c,n,poll), \
 	(dev_type_mmap((*))) enodev, 0, D_CLONE, dev_init(c,n,kqfilter) }
 
+/* open, close, read, write, poll, ioctl, nokqfilter */
+#define cdev_ipmi_init(c,n) { \
+	dev_init(c,n,open), dev_init(c,n,close), (dev_type_read((*))) enodev, \
+	(dev_type_write((*))) enodev, dev_init(c,n,ioctl), \
+	(dev_type_stop((*))) enodev, 0, (dev_type_poll((*))) enodev, \
+	(dev_type_mmap((*))) enodev, 0 }
+
 #endif
 
 /*
@@ -595,6 +602,7 @@ cdev_decl(hotplug);
 cdev_decl(gpio);
 cdev_decl(amdmsr);
 cdev_decl(fuse);
+cdev_decl(ipmi);
 
 #endif
 
