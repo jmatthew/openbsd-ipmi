@@ -47,11 +47,12 @@ struct ipmi_thread;
 struct ipmi_softc;
 struct ipmi_cmd;
 
-struct ipmi_bmc_args{
+struct ipmi_iowait {
 	int			offset;
 	u_int8_t		mask;
 	u_int8_t		value;
 	volatile u_int8_t	*v;
+	const char		*lbl;
 };
 
 struct ipmi_attach_args {
@@ -117,7 +118,7 @@ struct ipmi_softc {
 
 	struct rwlock		sc_lock;
 
-	struct ipmi_bmc_args	*sc_iowait_args;
+	struct ipmi_iowait	*sc_iowait_args;
 
 	struct ipmi_sensor	*current_sensor;
 	struct ksensordev	sc_sensordev;
