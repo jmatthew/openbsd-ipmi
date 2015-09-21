@@ -925,9 +925,6 @@ ipmi_smbios_probe(struct smbios_ipmi *pipmi, struct ipmi_attach_args *ia)
 /*
  * bt_buildmsg builds an IPMI message from a nfLun, cmd, and data
  * This is used by BT protocol
- *
- * Returns a buffer to an allocated message, txlen contains length
- *   of allocated message
  */
 void
 bt_buildmsg(struct ipmi_cmd *c)
@@ -948,9 +945,6 @@ bt_buildmsg(struct ipmi_cmd *c)
 /*
  * cmn_buildmsg builds an IPMI message from a nfLun, cmd, and data
  * This is used by both SMIC and KCS protocols
- *
- * Returns a buffer to an allocated message, txlen contains length
- *   of allocated message
  */
 void
 cmn_buildmsg(struct ipmi_cmd *c)
