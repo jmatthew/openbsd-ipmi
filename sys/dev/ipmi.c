@@ -117,6 +117,7 @@ int	ipmi_enabled = 0;
 #define IPMI_ENTITY_PWRSUPPLY		0x0A
 
 #define IPMI_INVALID_SENSOR		(1L << 5)
+#define IPMI_DISABLED_SENSOR		(1L << 6)
 
 #define IPMI_SDR_TYPEFULL		1
 #define IPMI_SDR_TYPECOMPACT		2
@@ -194,7 +195,6 @@ void	ipmi_unmap_regs(struct ipmi_softc *);
 
 void	*scan_sig(long, long, int, int, const void *);
 
-int	ipmi_test_threshold(u_int8_t, u_int8_t, u_int8_t, u_int8_t, int);
 int	ipmi_sensor_status(struct ipmi_softc *, struct ipmi_sensor *,
     u_int8_t *);
 
@@ -1292,26 +1292,11 @@ ipmi_convert(u_int8_t v, struct sdrtype1 *s1, long adj)
 }
 
 int
-ipmi_test_threshold(u_int8_t v, u_int8_t valid, u_int8_t hi, u_int8_t lo,
-    int sign)
-{
-	dbg_printf(10, "thresh: %.2x %.2x %.2x %d %d\n", v, lo, hi,valid, sign);
-	if (sign)
-		return ((valid & 1 && lo != 0x00 && (int8_t)v <= (int8_t)lo) ||
-		    (valid & 8 && hi != 0xFF && (int8_t)v >= (int8_t)hi));
-
-	return ((valid & 1 && lo != 0x00 && v <= lo) ||
-	    (valid & 8 && hi != 0xFF && v >= hi));
-}
-
-int
 ipmi_sensor_status(struct ipmi_softc *sc, struct ipmi_sensor *psensor,
     u_int8_t *reading)
 {
-	u_int8_t	data[32];
 	struct sdrtype1	*s1 = (struct sdrtype1 *)psensor->i_sdr;
 	int		etype;
-	int		sign = s1->units1 >> 7 & 1;
 
 	/* Get reading of sensor */
 	switch (psensor->i_sensor.type) {
@@ -1339,36 +1324,12 @@ ipmi_sensor_status(struct ipmi_softc *sc, struct ipmi_sensor *psensor,
 	case IPMI_SENSOR_TYPE_TEMP:
 	case IPMI_SENSOR_TYPE_VOLT:
 	case IPMI_SENSOR_TYPE_FAN:
-		data[0] = psensor->i_num;
-
-		struct ipmi_cmd	c;
-		c.c_sc = sc;
-		c.c_rssa = s1->owner_id;
-		c.c_rslun = s1->owner_lun;
-		c.c_netfn = SE_NETFN;
-		c.c_cmd = SE_GET_SENSOR_THRESHOLD;
-		c.c_txlen = 1;
-		c.c_maxrxlen = sizeof(data);
-		c.c_rxlen = 0;
-		c.c_data = data;
-		ipmi_cmd(&c);
-
-		dbg_printf(25, "recvdata: %.2x %.2x %.2x %.2x %.2x %.2x %.2x\n",
-		    data[0], data[1], data[2], data[3], data[4], data[5],
-		    data[6]);
-
-		if (ipmi_test_threshold(*reading, data[0] >> 2 ,
-		    data[6], data[3], sign))
-			return (SENSOR_S_CRIT);
-
-		if (ipmi_test_threshold(*reading, data[0] >> 1,
-		    data[5], data[2], sign))
-			return (SENSOR_S_CRIT);
-
-		if (ipmi_test_threshold(*reading, data[0] ,
-		    data[4], data[1], sign))
-			return (SENSOR_S_WARN);
-
+		if (reading[2] & ((1 << 5) | (1 << 2)))
+			return SENSOR_S_CRIT;
+		else if (reading[2] & ((1 << 4) | (1 << 1)))
+			return SENSOR_S_CRIT;
+		else if (reading[2] & ((1 << 3) | (1 << 0)))
+			return SENSOR_S_WARN;
 		break;
 
 	case IPMI_SENSOR_TYPE_INTRUSION:
@@ -1423,10 +1384,9 @@ read_sensor(struct ipmi_softc *sc, struct ipmi_sensor *psensor)
 	dbg_printf(10, "values=%.2x %.2x %.2x %.2x %s\n",
 	    data[0],data[1],data[2],data[3], psensor->i_sensor.desc);
 	psensor->i_sensor.flags &= ~SENSOR_FINVALID;
-	if (data[1] & IPMI_INVALID_SENSOR) {
-		/* Check if sensor is valid */
+	if ((data[1] & IPMI_INVALID_SENSOR) ||
+	    ((data[1] & IPMI_DISABLED_SENSOR) == 0 && data[0] == 0))
 		psensor->i_sensor.flags |= SENSOR_FINVALID;
-	}
 	psensor->i_sensor.status = ipmi_sensor_status(sc, psensor, data);
 	rv = 0;
 	return (rv);
