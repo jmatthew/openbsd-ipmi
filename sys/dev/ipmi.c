@@ -1064,12 +1064,19 @@ ipmi_cmd_wait(struct ipmi_cmd *c)
 	struct task t;
 	int res;
 
+	mtx_enter(&c->c_sc->sc_cmd_mtx);
+
 	task_set(&t, ipmi_cmd_wait_cb, c);
 	res = task_add(c->c_sc->sc_cmd_taskq, &t);
 	KASSERT(res == 1);
-	tsleep(c, PWAIT, "ipmicmd", 0);
+
+	while (c->ccode == 0 && c->c_rxlen == 0)
+		msleep(c, &c->c_sc->sc_cmd_mtx, PWAIT, "ipmicmd", 0);
+
 	res = task_del(c->c_sc->sc_cmd_taskq, &t);
 	KASSERT(res == 0);
+
+	mtx_leave(&c->c_sc->sc_cmd_mtx);
 }
 
 void
@@ -1078,7 +1085,9 @@ ipmi_cmd_wait_cb(void *arg)
 	struct ipmi_cmd *c = arg;
 
 	ipmi_cmd_poll(c);
+	mtx_enter(&c->c_sc->sc_cmd_mtx);
 	wakeup(c);
+	mtx_leave(&c->c_sc->sc_cmd_mtx);
 }
 
 /* Read a partial SDR entry */
@@ -1721,7 +1730,8 @@ ipmi_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_cmd = NULL;
 	sc->sc_cmd_iowait = NULL;
-	sc->sc_cmd_taskq = taskq_create("ipmicmd", 1, IPL_NONE, 0);
+	sc->sc_cmd_taskq = taskq_create("ipmicmd", 1, IPL_NONE, TASKQ_MPSAFE);
+	mtx_init(&sc->sc_cmd_mtx, IPL_NONE);
 }
 
 int

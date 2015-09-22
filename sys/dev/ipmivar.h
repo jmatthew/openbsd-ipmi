@@ -114,6 +114,7 @@ struct ipmi_softc {
 	struct ipmi_cmd		*sc_cmd;
 	struct ipmi_iowait	*sc_cmd_iowait;
 	struct taskq		*sc_cmd_taskq;
+	struct mutex		sc_cmd_mtx;
 
 	struct ipmi_ioctl {
 		struct rwlock		lock;
