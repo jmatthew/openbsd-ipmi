@@ -11,7 +11,7 @@ patch -p1 </tmp/ipmi.patch
 ```
 
 ipmitool (sysutils/ipmitool)
-- Comment out ```CONFIGURE_ARGS+=--disable-intf-open``` and build and install
+- Apply the patch (```(cd sysutils/ipmitool && patch) < ipmitool.patch```), build, and install
 - Create /dev/ipmi0 by ```doas mknod -m 0600 /dev/ipmi0 c 93 0```
 - Try commands
   - ```ipmitool chassis status```
