@@ -1711,7 +1711,7 @@ ipmi_match(struct device *parent, void *match, void *aux)
 		c.c_data = cmd;
 		ipmi_cmd(&c);
 
-		dbg_dump(1, "bmc data", len, cmd);
+		dbg_dump(1, "bmc data", c.c_rxlen, cmd);
 		rv = 1; /* GETID worked, we got IPMI */
 		ipmi_unmap_regs(&sc);
 	}
