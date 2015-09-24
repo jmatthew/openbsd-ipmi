@@ -1005,7 +1005,7 @@ done:
 	return (rc);
 }
 
-/* Send an IPMI command */
+/* Receive an IPMI command */
 int
 ipmi_recvcmd(struct ipmi_cmd *c)
 {
