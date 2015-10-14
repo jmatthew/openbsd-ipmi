@@ -110,7 +110,7 @@ struct ipmi_softc {
 	bus_space_handle_t	sc_ioh;
 
 	int			sc_btseq;
-	u_int8_t		*sc_buf;
+	u_int8_t		sc_buf[IPMI_MAX_RX + 16];
 	struct ipmi_cmd		*sc_cmd;
 	struct ipmi_iowait	*sc_cmd_iowait;
 	struct taskq		*sc_cmd_taskq;
@@ -119,7 +119,6 @@ struct ipmi_softc {
 		struct rwlock		lock;
 		struct ipmi_req		req;
 		struct ipmi_cmd		cmd;
-		char			buf[IPMI_MAX_RX];
 	} sc_ioctl;
 
 	int			sc_wdog_period;

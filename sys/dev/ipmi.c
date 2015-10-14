@@ -1046,12 +1046,6 @@ ipmi_cmd_poll(struct ipmi_cmd *c)
 {
 	struct ipmi_iowait	iowait;
 
-	if (c->c_sc->sc_buf == NULL) {
-		KASSERTMSG(c->c_txlen <= IPMI_MAX_RX, "len=%d", c->c_txlen);
-		c->c_sc->sc_buf = malloc(c->c_sc->sc_if->datarcv + IPMI_MAX_RX,
-		    M_DEVBUF, M_WAITOK);
-	}
-
 	c->c_sc->sc_cmd = c;
 	c->c_sc->sc_cmd_iowait = &iowait;
 	if (ipmi_sendcmd(c)) {
@@ -1687,7 +1681,7 @@ ipmi_match(struct device *parent, void *match, void *aux)
 
 	/* XXX local softc is wrong wrong wrong */
 	strlcpy(sc.sc_dev.dv_xname, "ipmi0", sizeof(sc.sc_dev.dv_xname));
-	sc.sc_buf = NULL;
+
 	/* Map registers */
 	if (ipmi_map_regs(&sc, ia) == 0) {
 		sc.sc_if->probe(&sc);
@@ -1746,8 +1740,6 @@ ipmi_attach(struct device *parent, struct device *self, void *aux)
 	/* setup flag to exclude iic */
 	ipmi_enabled = 1;
 
-	sc->sc_buf = NULL;
-
 	/* Setup Watchdog timer */
 	sc->sc_wdog_period = 0;
 	for (i = 0; i < IPMI_WDOG_TICKLE_NTASKS; i++)
@@ -1764,9 +1756,7 @@ ipmi_attach(struct device *parent, struct device *self, void *aux)
 	c->c_netfn = -1;
 	c->c_cmd = -1;
 	c->c_txlen = -1;
-	c->c_maxrxlen = sizeof(sc->sc_ioctl.buf);
 	c->c_rxlen = -1;
-	c->c_data = sc->sc_ioctl.buf;
 	c->c_ccode = -1;
 
 	sc->sc_cmd = NULL;
@@ -1814,6 +1804,7 @@ ipmiioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *proc)
 	int			len;
 	u_char			ccode;
 	int			rc = 0;
+	u_int8_t		buf[IPMI_MAX_RX];
 
 	if (sc == NULL)
 		return (ENXIO);
@@ -1828,6 +1819,9 @@ ipmiioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *proc)
 #endif
 
 	rw_enter_write(&sc->sc_ioctl.lock);
+
+	c->c_maxrxlen = sizeof(buf);
+	c->c_data = buf;
 
 	switch (cmd) {
 #ifdef IPMICTL_SEND_COMMAND_32
